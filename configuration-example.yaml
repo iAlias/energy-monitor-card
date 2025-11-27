@@ -1,0 +1,61 @@
+homeassistant:
+  name: Home
+  unit_system: metric
+  time_zone: Europe/Rome
+  latitude: 0
+  longitude: 0
+  elevation: 0
+
+frontend:
+
+http:
+  cors_allowed_origins:
+    - http://localhost:8123
+    - http://127.0.0.1:8123
+
+# Abilita logging dei sensori
+recorder:
+  purge_keep_days: 30
+  include:
+    domains:
+      - sensor
+    entity_globs:
+      - sensor.*_energy
+      - sensor.*_power
+      - sensor.*_consumption
+
+# Configurazione per i sensori di energia
+template:
+  - sensor:
+      - name: "Consumo Totale"
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state: >
+          {% set sensors = [
+            states('sensor.scaldabagno_energy'),
+            states('sensor.clima_energy'),
+            states('sensor.lavastoviglie_energy')
+          ] | map('float', default=0) | list %}
+          {{ (sensors | sum | round(2)) }}
+
+# Example dashboard YAML per testare la card
+# Aggiungi questo nella tua dashboard
+
+dashboard_example:
+  # In /config/www/dashboards/dashboard-energy.yaml
+  # type: custom:energy-monitor-card
+  # title: "Monitoraggio Energetico"
+  # price_per_kwh: 0.25
+  # show_comparison: true
+  # show_costs: true
+  # auto_detect: true
+  # entities:
+  #   - entity_id: sensor.scaldabagno_energy
+  #     name: "Scaldabagno"
+  #     icon: mdi:water-heater
+  #   - entity_id: sensor.clima_energy
+  #     name: "Climatizzatore"
+  #     icon: mdi:air-conditioner
+  #   - entity_id: sensor.lavastoviglie_energy
+  #     name: "Lavastoviglie"
+  #     icon: mdi:dishwasher

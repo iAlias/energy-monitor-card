@@ -1,0 +1,34 @@
+{
+  "name": "Energy Monitor Card",
+  "version": "1.0.0",
+  "description": "Monitora i consumi energetici con confronti temporali e calcolo costi",
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/energy-monitor-card"
+  },
+  "homepage": "https://github.com/yourusername/energy-monitor-card",
+  "keywords": [
+    "energy",
+    "consumption",
+    "monitoring",
+    "home-assistant",
+    "custom-card",
+    "power",
+    "kwh",
+    "comparison",
+    "cost"
+  ],
+  "dependencies": {
+    "lit": "^2.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ]
+}
