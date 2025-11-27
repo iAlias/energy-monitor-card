@@ -1,0 +1,6 @@
+{
+  "name": "Energy Monitor Card",
+  "render_path": "dist/energy-monitor-card.js",
+  "filename": "energy-monitor-card.js",
+  "content_in_root": false
+}
