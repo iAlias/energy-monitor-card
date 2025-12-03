@@ -7,6 +7,7 @@ from aiohttp import web
 import voluptuous as vol
 
 from homeassistant.components.http import HomeAssistantView
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.components.recorder.history import get_significant_states
@@ -25,12 +26,24 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Empty config schema allows integration without configuration.yaml entry
 CONFIG_SCHEMA = vol.Schema({DOMAIN: vol.Schema({})}, extra=vol.ALLOW_EXTRA)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Set up the Energy Monitor Backend integration."""
-    _LOGGER.info("Setting up Energy Monitor Backend integration")
+    """Set up the Energy Monitor Backend integration from YAML.
+    
+    This integration auto-loads when installed via HACS.
+    A configuration.yaml entry enables the integration:
+    
+    energy_monitor_backend:
+    
+    Alternatively, it can be set up via the UI (Configuration > Integrations).
+    """
+    if DOMAIN not in config:
+        return True
+    
+    _LOGGER.info("Setting up Energy Monitor Backend integration from YAML")
     
     # Register HTTP views
     hass.http.register_view(EntitiesView)
@@ -38,6 +51,27 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.http.register_view(HistoryView)
     
     _LOGGER.info("Energy Monitor Backend integration setup complete")
+    _LOGGER.info("API endpoints available at /api/energy_monitor/*")
+    return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up Energy Monitor Backend from a config entry (UI setup)."""
+    _LOGGER.info("Setting up Energy Monitor Backend integration from config entry")
+    
+    # Register HTTP views
+    hass.http.register_view(EntitiesView)
+    hass.http.register_view(StateView)
+    hass.http.register_view(HistoryView)
+    
+    _LOGGER.info("Energy Monitor Backend integration setup complete")
+    _LOGGER.info("API endpoints available at /api/energy_monitor/*")
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    _LOGGER.info("Unloading Energy Monitor Backend integration")
     return True
 
 

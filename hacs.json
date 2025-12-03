@@ -1,7 +1,7 @@
 {
   "name": "Energy Monitor Card",
-  "render_path": "dist/energy-monitor-card.js",
+  "render_path": "www/community/energy-monitor-card/energy-monitor-card.js",
   "filename": "energy-monitor-card.js",
   "content_in_root": false,
-  "country": "IT"
+  "homeassistant": "2023.12.0"
 }
