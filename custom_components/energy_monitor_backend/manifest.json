@@ -1,0 +1,10 @@
+{
+  "domain": "energy_monitor_backend",
+  "name": "Energy Monitor Backend",
+  "version": "1.0.0",
+  "documentation": "https://github.com/iAlias/energy-monitor-card",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@iAlias"],
+  "iot_class": "local_polling"
+}
