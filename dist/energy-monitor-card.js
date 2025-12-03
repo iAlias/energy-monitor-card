@@ -242,13 +242,13 @@ class EnergyMonitorCard extends LitElement {
 
   async _getHistoryData(entityId, startDate, endDate) {
     try {
-      // Verifica che l'entità esista
+      // Verify entity exists
       if (!this.hass.states[entityId]) {
-        console.warn(`⚠️ Entità non trovata: ${entityId}`);
+        console.warn(`⚠️ Entity not found: ${entityId}`);
         return [];
       }
 
-      // Aggiungi timezone UTC alle date (ISO 8601 completo)
+      // Add UTC timezone to dates (full ISO 8601 format)
       const start = `${startDate}T00:00:00Z`;
       const end = `${endDate}T23:59:59Z`;
 
@@ -270,9 +270,9 @@ class EnergyMonitorCard extends LitElement {
     } catch (error) {
       console.error(`❌ API Error for ${entityId}:`, error);
       
-      // Log dettagliato dell'errore (verifica struttura dell'oggetto error)
+      // Detailed error logging (verify error object structure)
       if (error && error.status_code === 404) {
-        console.error(`  → 404 Not Found - L'entità ${entityId} potrebbe non avere dati storici`);
+        console.error(`  → 404 Not Found - Entity ${entityId} may not have historical data`);
       } else if (error && error.status_code) {
         console.error(`  → HTTP ${error.status_code}: ${error.message || 'Unknown error'}`);
       }
@@ -498,7 +498,7 @@ class EnergyMonitorCard extends LitElement {
     const comparisonKwh = consumption.comparison ? this._calculateTotalConsumption(consumption.comparison) : 0;
     const percentageDiff = this._getComparison(currentKwh, comparisonKwh);
     // Only check if historical data exists, not if consumption is zero (device could be off)
-    const hasNoData = !consumption.current || consumption.current.length === 0;
+    const hasNoData = !consumption.current?.length;
 
     return html`
       <div class="device-card ${hasNoData ? 'no-data' : ''}">
