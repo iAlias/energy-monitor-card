@@ -1,0 +1,48 @@
+# Example Home Assistant Configuration for Energy Monitor Backend
+
+# Enable the Energy Monitor Backend integration
+energy_monitor_backend:
+
+# Configure recorder to keep energy sensor history
+recorder:
+  purge_keep_days: 30
+  include:
+    domains:
+      - sensor
+    entity_globs:
+      - sensor.*_energy
+      - sensor.*_power
+      - sensor.*_consumption
+
+# Enable logger for debugging (optional)
+logger:
+  default: info
+  logs:
+    custom_components.energy_monitor_backend: debug
+
+# Example template sensors (optional)
+template:
+  - sensor:
+      - name: "Total Energy Consumption"
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        state: >
+          {% set sensors = [
+            states('sensor.water_heater_energy') | float(0),
+            states('sensor.hvac_energy') | float(0),
+            states('sensor.dishwasher_energy') | float(0)
+          ] %}
+          {{ (sensors | sum | round(2)) }}
+      
+      - name: "Total Power Consumption"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set sensors = [
+            states('sensor.water_heater_power') | float(0),
+            states('sensor.hvac_power') | float(0),
+            states('sensor.dishwasher_power') | float(0)
+          ] %}
+          {{ (sensors | sum | round(2)) }}

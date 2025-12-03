@@ -266,9 +266,16 @@ class EnergyMonitorCard extends LitElement {
 
   async _getHistoryData(entityId, startDate, endDate) {
     try {
-      // Verify entity exists
-      if (!this.hass.states[entityId]) {
-        console.warn(`⚠️ Entity not found: ${entityId}`);
+      // Verify entity exists using new backend API
+      const stateEndpoint = `/api/energy_monitor/state?entity_id=${entityId}`;
+      
+      try {
+        const stateResponse = await this.hass.callApi('GET', stateEndpoint);
+        if (!stateResponse || stateResponse.state === null) {
+          console.warn(`⚠️ Entity ${entityId} has invalid state`);
+        }
+      } catch (stateError) {
+        console.warn(`⚠️ Entity not found: ${entityId}`, stateError);
         return [];
       }
 
@@ -276,27 +283,38 @@ class EnergyMonitorCard extends LitElement {
       const start = `${startDate}T00:00:00Z`;
       const end = `${endDate}T23:59:59Z`;
 
-      const endpoint = `/api/history/period/${start}?end_time=${end}&filter_entity_id=${entityId}`;
+      // Use new backend API endpoint
+      const endpoint = `/api/energy_monitor/history?entity_id=${entityId}&start_time=${start}&end_time=${end}`;
       
-      console.log(`🔌 API Request: ${endpoint}`);
+      console.log(`🔌 Backend API Request: ${endpoint}`);
 
       const response = await this.hass.callApi('GET', endpoint);
 
-      console.log(`📦 Response for ${entityId}:`, response);
+      console.log(`📦 Backend Response for ${entityId}:`, response);
 
-      if (Array.isArray(response) && response.length > 0 && Array.isArray(response[0])) {
-        console.log(`  ✓ ${response[0].length} data points found`);
-        return response[0];
+      // Parse backend API response format
+      if (response && response.data && response.data[entityId]) {
+        const historyData = response.data[entityId];
+        console.log(`  ✓ ${historyData.length} data points found`);
+        // Convert backend format to expected format
+        return historyData.map(point => ({
+          state: point.state,
+          last_changed: point.last_changed,
+          last_updated: point.last_updated,
+          attributes: point.attributes
+        }));
       }
 
       console.warn(`  ⚠️ No data for ${entityId}`);
       return [];
     } catch (error) {
-      console.error(`❌ API Error for ${entityId}:`, error);
+      console.error(`❌ Backend API Error for ${entityId}:`, error);
       
-      // Detailed error logging (verify error object structure)
+      // Detailed error logging
       if (error && error.status_code === 404) {
         console.error(`  → 404 Not Found - Entity ${entityId} may not have historical data`);
+      } else if (error && error.status_code === 503) {
+        console.error(`  → 503 Service Unavailable - Recorder may not be available`);
       } else if (error && error.status_code) {
         console.error(`  → HTTP ${error.status_code}: ${error.message || 'Unknown error'}`);
       }
