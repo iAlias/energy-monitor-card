@@ -29,13 +29,14 @@ class EnergyMonitorCard extends LitElement {
   }
 
   constructor() {
-    super();
+   super();
     this._devices = [];
     this._selectedPeriod = 'day';
     this._comparisonPeriod = 'previous_day';
     this._consumptionData = {};
     this._costData = {};
     this._loading = false;
+    this._isLoadingData = false; // ← AGGIUNGI QUESTO
     this._initializeDates();
   }
 
@@ -58,11 +59,6 @@ class EnergyMonitorCard extends LitElement {
   }
 
   async updated(changedProperties) {
-    if (changedProperties.has('hass')) {
-      if (changedProperties.get('hass') && changedProperties.get('hass') !== this.hass) {
-        await this._loadConsumptionData();
-      }
-    }
   }
 
   _initializeDates() {
@@ -145,88 +141,140 @@ class EnergyMonitorCard extends LitElement {
     }
 
     this._devices = Object.values(detectedDevices);
+
+    // Alla fine di _detectDevices(), prima di "this._devices = Object.values(detectedDevices);"
+    // Converti sensori power (W) in energy (kWh) se non ci sono sensori energy
+    Object.values(detectedDevices).forEach(device => {
+      const hasEnergy = device.entities.some(e => e.type === 'energy');
+      if (!hasEnergy) {
+        // Se ha solo power, convertiamo il tipo per tentare comunque
+        device.entities.forEach(e => {
+          if (e.type === 'power') {
+            console.log(`Conversione ${e.entity_id} da power a energy (approssimazione)`);
+            e.type = 'energy'; // Prova comunque a caricare history
+          }
+        });
+      }
+    });
+    
+    this._devices = Object.values(detectedDevices);
+    console.log('Dispositivi rilevati:', this._devices);
+
   }
 
   // -------- CARICAMENTO DATI STORICI --------
 
   async _loadConsumptionData() {
-    if (!this.hass || !this._devices || !this._devices.length) return;
+  // Previeni chiamate multiple simultanee
+  if (this._isLoadingData) {
+    console.log('Caricamento già in corso, salto questa chiamata');
+    return;
+  }
 
-    this._loading = true;
-    this.requestUpdate();
+  if (!this.hass || !this._devices || !this._devices.length) {
+    console.log('Nessun dispositivo trovato o hass non pronto');
+    return;
+  }
 
-    this._consumptionData = {};
-    this._costData = {};
+  this._isLoadingData = true;
+  this._loading = true;
+  this.requestUpdate();
 
-    try {
-      for (const device of this._devices) {
-        for (const entity of device.entities) {
-          if (entity.type !== 'energy') continue;
+  this._consumptionData = {};
+  this._costData = {};
 
-          const currentData = await this._getHistoryData(
-            entity.entity_id,
-            this._startDate,
-            this._endDate
-          );
+  try {
+    console.log(`Carico dati per ${this._devices.length} dispositivi`);
+    
+    for (const device of this._devices) {
+      for (const entity of device.entities) {
+        if (entity.type !== 'energy') {
+          console.log(`Salto ${entity.entity_id} - tipo ${entity.type}`);
+          continue;
+        }
 
-          const comparisonData = this.config.show_comparison
-            ? await this._getHistoryData(
-                entity.entity_id,
-                this._comparisonStartDate,
-                this._comparisonEndDate
-              )
-            : null;
+        console.log(`Carico history per ${entity.entity_id}`);
 
-          this._consumptionData[device.id] = {
-            current: currentData,
-            comparison: comparisonData,
-            device: device.name
+        const currentData = await this._getHistoryData(
+          entity.entity_id,
+          this._startDate,
+          this._endDate
+        );
+
+        console.log(`  → Ricevuti ${currentData.length} punti per periodo corrente`);
+
+        const comparisonData = this.config.show_comparison
+          ? await this._getHistoryData(
+              entity.entity_id,
+              this._comparisonStartDate,
+              this._comparisonEndDate
+            )
+          : null;
+
+        if (comparisonData) {
+          console.log(`  → Ricevuti ${comparisonData.length} punti per confronto`);
+        }
+
+        this._consumptionData[device.id] = {
+          current: currentData,
+          comparison: comparisonData,
+          device: device.name
+        };
+
+        if (this.config.show_costs) {
+          const kwh = this._calculateTotalConsumption(currentData);
+          const comparisonKwh = comparisonData
+            ? this._calculateTotalConsumption(comparisonData)
+            : 0;
+
+          console.log(`  → Consumo: ${kwh} kWh, Confronto: ${comparisonKwh} kWh`);
+
+          this._costData[device.id] = {
+            current: kwh * this.config.price_per_kwh,
+            comparison: comparisonKwh * this.config.price_per_kwh,
+            kwh,
+            comparisonKwh
           };
-
-          if (this.config.show_costs) {
-            const kwh = this._calculateTotalConsumption(currentData);
-            const comparisonKwh = comparisonData
-              ? this._calculateTotalConsumption(comparisonData)
-              : 0;
-
-            this._costData[device.id] = {
-              current: kwh * this.config.price_per_kwh,
-              comparison: comparisonKwh * this.config.price_per_kwh,
-              kwh,
-              comparisonKwh
-            };
-          }
         }
       }
-    } catch (err) {
-      console.error('Errore nel caricamento dati energetici:', err);
-    } finally {
-      this._loading = false;
-      this.requestUpdate();
     }
+
+    console.log('Caricamento dati completato');
+  } catch (err) {
+    console.error('Errore nel caricamento dati energetici:', err);
+  } finally {
+    this._loading = false;
+    this._isLoadingData = false;
+    this.requestUpdate();
   }
+}
 
-  async _getHistoryData(entityId, startDate, endDate) {
-    try {
-      // Usa timezone locale di HA, niente "Z"
-      const start = `${startDate}T00:00:00`;
-      const end = `${endDate}T23:59:59`;
+ async _getHistoryData(entityId, startDate, endDate) {
+  try {
+    const start = `${startDate}T00:00:00`;
+    const end = `${endDate}T23:59:59`;
 
-      // Endpoint corretto: /api/history/period/...
-      const response = await this.hass.callApi(
-        'get',
-        `api/history/period/${start}?end_time=${end}&filter_entity_id=${entityId}`
-      );
+    console.log(`API call: api/history/period/${start}?end_time=${end}&filter_entity_id=${entityId}`);
 
-      if (Array.isArray(response) && response.length > 0) {
-        return response[0];
-      }
-      return [];
-    } catch (error) {
-      console.error(`Errore nel caricamento della history per ${entityId}:`, error);
-      return [];
+    const response = await this.hass.callApi(
+      'get',
+      `api/history/period/${start}?end_time=${end}&filter_entity_id=${entityId}`
+    );
+
+    console.log(`Risposta API per ${entityId}:`, response);
+
+    if (Array.isArray(response) && response.length > 0 && Array.isArray(response[0])) {
+      return response[0];
     }
+    
+    console.warn(`Nessun dato history per ${entityId}`);
+    return [];
+  } catch (error) {
+    console.error(`Errore chiamata API per ${entityId}:`, error);
+    return [];
   }
+}
+
 
   _calculateTotalConsumption(historyData) {
     if (!Array.isArray(historyData) || historyData.length === 0) return 0;
