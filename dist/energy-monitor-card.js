@@ -79,47 +79,51 @@ class EnergyMonitorCard extends LitElement {
 
     const detectedDevices = {};
 
-    Object.keys(this.hass.states).forEach((entityId) => {
-      const state = this.hass.states[entityId];
+    // Only auto-detect if enabled in config
+    if (this.config.auto_detect) {
+      Object.keys(this.hass.states).forEach((entityId) => {
+        const state = this.hass.states[entityId];
 
-      // SKIP sensori _cost, _power, cerchiamo solo _energy puri
-      if (entityId.includes('_cost') || entityId.includes('_price')) {
-        return;
-      }
-
-      if (
-        entityId.startsWith('sensor.') &&
-        (
-          state.attributes.unit_of_measurement === 'kWh' ||
-          state.attributes.device_class === 'energy' ||
-          (entityId.includes('energy') && !entityId.includes('power'))
-        )
-      ) {
-        const deviceId = state.attributes.device_id || entityId;
-        const deviceName = state.attributes.friendly_name || entityId;
-
-        if (!detectedDevices[deviceId]) {
-          detectedDevices[deviceId] = {
-            id: deviceId,
-            name: deviceName,
-            entities: [],
-            icon: 'mdi:lightning-bolt'
-          };
+        // SKIP sensori _cost, _power, cerchiamo solo _energy puri
+        if (entityId.includes('_cost') || entityId.includes('_price')) {
+          return;
         }
 
-        detectedDevices[deviceId].entities.push({
-          entity_id: entityId,
-          unit: state.attributes.unit_of_measurement,
-          type: 'energy'
-        });
-      }
-    });
+        if (
+          entityId.startsWith('sensor.') &&
+          (
+            state.attributes.unit_of_measurement === 'kWh' ||
+            state.attributes.device_class === 'energy' ||
+            (entityId.includes('energy') && !entityId.includes('power'))
+          )
+        ) {
+          const deviceId = state.attributes.device_id || entityId;
+          const deviceName = state.attributes.friendly_name || entityId;
 
-    // Entità configurate manualmente
+          if (!detectedDevices[deviceId]) {
+            detectedDevices[deviceId] = {
+              id: deviceId,
+              name: deviceName,
+              entities: [],
+              icon: 'mdi:lightning-bolt'
+            };
+          }
+
+          detectedDevices[deviceId].entities.push({
+            entity_id: entityId,
+            unit: state.attributes.unit_of_measurement,
+            type: 'energy'
+          });
+        }
+      });
+    }
+
+    // Entità configurate manualmente - accept ANY sensor.* entity
     if (this.config.entities && Array.isArray(this.config.entities)) {
       this.config.entities.forEach((entity) => {
-        if (this.hass.states[entity.entity_id]) {
-          const state = this.hass.states[entity.entity_id];
+        const state = this.hass.states[entity.entity_id];
+        
+        if (state) {
           const deviceName = entity.name || state.attributes.friendly_name || entity.entity_id;
 
           detectedDevices[entity.entity_id] = {
@@ -130,9 +134,26 @@ class EnergyMonitorCard extends LitElement {
               {
                 entity_id: entity.entity_id,
                 unit: state.attributes.unit_of_measurement,
-                type: 'energy'
+                type: 'sensor'
               }
-            ]
+            ],
+            isManualConfig: true
+          };
+        } else {
+          // Entity doesn't exist - still add it to show error
+          detectedDevices[entity.entity_id] = {
+            id: entity.entity_id,
+            name: entity.name || entity.entity_id,
+            icon: entity.icon || 'mdi:lightning-bolt',
+            entities: [
+              {
+                entity_id: entity.entity_id,
+                unit: null,
+                type: 'sensor'
+              }
+            ],
+            isManualConfig: true,
+            notFound: true
           };
         }
       });
@@ -382,6 +403,13 @@ class EnergyMonitorCard extends LitElement {
     return Math.round(diff * 10) / 10;
   }
 
+  _isValidNumber(val) {
+    if (val === undefined || val === null) return false;
+    if (["unavailable", "unknown", "none", ""].includes(String(val).toLowerCase()))
+      return false;
+    return !isNaN(Number(val));
+  }
+
   _formatCurrency(value) {
     return new Intl.NumberFormat('it-IT', {
       style: 'currency',
@@ -489,9 +517,101 @@ class EnergyMonitorCard extends LitElement {
   }
 
   _renderDeviceCard(device) {
+    // Check if entity exists
+    if (device.notFound) {
+      return html`
+        <div class="device-card error-card">
+          <div class="device-header">
+            <ha-icon icon="${device.icon}"></ha-icon>
+            <h3>${device.name}</h3>
+          </div>
+          <div class="error-message" style="margin: 0;">
+            <ha-icon icon="mdi:alert-circle"></ha-icon>
+            <span style="color: red; font-weight: bold;">Sensore non trovato</span>
+          </div>
+        </div>
+      `;
+    }
+
+    // Get live state value
+    const entityState = this.hass.states[device.entities[0].entity_id];
+    let liveValue = null;
+    let liveValueDisplay = null;
+    
+    if (entityState) {
+      const stateValue = entityState.state;
+      const unit = entityState.attributes.unit_of_measurement || '';
+      
+      // Check if value is numeric and valid
+      if (this._isValidNumber(stateValue)) {
+        liveValue = parseFloat(stateValue);
+        liveValueDisplay = html`<span>${liveValue} ${unit}</span>`;
+      } else {
+        liveValueDisplay = html`<span style="color: red; font-weight: bold;">Valore non disponibile</span>`;
+      }
+    } else {
+      liveValueDisplay = html`<span style="color: red; font-weight: bold;">Sensore non trovato</span>`;
+    }
+
     const consumption = this._consumptionData[device.id];
     const cost = this._costData[device.id];
 
+    // For manually configured sensors, show live data prominently
+    if (device.isManualConfig) {
+      const hasHistoryData = consumption && consumption.current && consumption.current.length > 0;
+      
+      return html`
+        <div class="device-card ${!hasHistoryData ? 'no-data' : ''}">
+          <div class="device-header">
+            <ha-icon icon="${device.icon}"></ha-icon>
+            <h3>${device.name}</h3>
+          </div>
+
+          <div class="device-stats">
+            <div class="stat">
+              <span class="stat-label">Valore attuale</span>
+              <span class="stat-value">${liveValueDisplay}</span>
+            </div>
+
+            ${hasHistoryData ? html`
+              <div class="stat">
+                <span class="stat-label">Consumo periodo</span>
+                <span class="stat-value">${this._calculateTotalConsumption(consumption.current).toFixed(2)} ${device.entities[0].unit || ''}</span>
+                ${this.config.show_costs && cost ? html`<span class="stat-cost">${this._formatCurrency(cost.current)}</span>` : ''}
+              </div>
+
+              ${this.config.show_comparison && consumption.comparison && consumption.comparison.length > 0
+                ? html`
+                    <div class="stat">
+                      <span class="stat-label">Periodo precedente</span>
+                      <span class="stat-value">${this._calculateTotalConsumption(consumption.comparison).toFixed(2)} ${device.entities[0].unit || ''}</span>
+                      ${this.config.show_costs && cost ? html`<span class="stat-cost">${this._formatCurrency(cost.comparison)}</span>` : ''}
+                    </div>
+
+                    <div class="stat comparison">
+                      <span class="stat-label">Variazione</span>
+                      <span class="stat-value ${this._getComparison(this._calculateTotalConsumption(consumption.current), this._calculateTotalConsumption(consumption.comparison)) > 0 ? 'increase' : 'decrease'}">
+                        ${this._getComparison(this._calculateTotalConsumption(consumption.current), this._calculateTotalConsumption(consumption.comparison)) > 0 ? '+' : ''}${this._getComparison(this._calculateTotalConsumption(consumption.current), this._calculateTotalConsumption(consumption.comparison))}%
+                      </span>
+                    </div>
+                  `
+                : ''}
+            ` : html`
+              <div class="no-data-message">
+                <ha-icon icon="mdi:information-outline"></ha-icon>
+                <span>Nessun dato storico disponibile</span>
+              </div>
+            `}
+          </div>
+
+          ${hasHistoryData ? html`
+            <div class="device-chart">${this._renderChart(device.id, this._calculateTotalConsumption(consumption.current), consumption.comparison ? this._calculateTotalConsumption(consumption.comparison) : 0)}</div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    // For auto-detected energy sensors, keep the original behavior
     if (!consumption) return '';
 
     const currentKwh = consumption.current ? this._calculateTotalConsumption(consumption.current) : 0;
@@ -510,7 +630,7 @@ class EnergyMonitorCard extends LitElement {
         ${hasNoData ? html`
           <div class="no-data-message">
             <ha-icon icon="mdi:information-outline"></ha-icon>
-            <span>Nessun dato disponibile per questo periodo</span>
+            <span>Nessun dato storico disponibile</span>
           </div>
         ` : ''}
 
@@ -636,6 +756,7 @@ class EnergyMonitorCard extends LitElement {
       .devices-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; margin-bottom: 20px; }
       .device-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; }
       .device-card.no-data { opacity: 0.7; }
+      .device-card.error-card { border-color: var(--error-color); background: rgba(244, 67, 54, 0.05); }
       .no-data-message { display: flex; align-items: center; gap: 8px; padding: 10px; margin-bottom: 10px; background: rgba(255, 152, 0, 0.1); border-left: 3px solid var(--warning-color); border-radius: 4px; color: var(--warning-color); font-size: 13px; }
       .no-data-message ha-icon { width: 20px; height: 20px; }
       .device-header { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; border-bottom: 2px solid var(--border-color); padding-bottom: 10px; }
