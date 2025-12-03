@@ -11,7 +11,15 @@ from homeassistant.util import dt as dt_util
 from homeassistant.components import recorder
 from homeassistant.components.recorder.history import get_significant_states
 
+from .validation import INVALID_STATE_VALUES
+
 _LOGGER = logging.getLogger(__name__)
+
+# Constants for get_significant_states parameters
+INCLUDE_START_TIME_STATE = True
+SIGNIFICANT_CHANGES_ONLY = True
+MINIMAL_RESPONSE = 0.0
+NO_ATTRIBUTES = False
 
 
 class EnergyMonitorEntitiesView(HomeAssistantView):
@@ -241,10 +249,10 @@ class EnergyMonitorHistoryView(HomeAssistantView):
                 end_time,
                 [entity_id],
                 None,  # filters
-                True,  # include_start_time_state
-                True,  # significant_changes_only
-                0.0,   # minimal_response
-                False  # no_attributes
+                INCLUDE_START_TIME_STATE,
+                SIGNIFICANT_CHANGES_ONLY,
+                MINIMAL_RESPONSE,
+                NO_ATTRIBUTES
             )
             
             if not history or entity_id not in history:
@@ -254,8 +262,8 @@ class EnergyMonitorHistoryView(HomeAssistantView):
             # Convert history states to simple dict format
             result = []
             for state in history[entity_id]:
-                # Skip invalid states
-                if state.state in ["unavailable", "unknown", "none", ""]:
+                # Skip invalid states using constant from validation module
+                if state.state in INVALID_STATE_VALUES:
                     continue
                 
                 try:
@@ -307,13 +315,21 @@ class EnergyMonitorHistoryView(HomeAssistantView):
             
             # For cumulative sensors (like energy), consumption is the difference
             # between last and first reading
-            total_consumption = values[-1] - values[0] if len(values) > 1 else 0
+            # Handle sensor resets: if last < first, sensor was reset, use last value only
+            if len(values) > 1:
+                total_consumption = values[-1] - values[0]
+                # If negative (sensor reset), use the last value as total
+                if total_consumption < 0:
+                    _LOGGER.debug(f"Sensor reset detected (negative consumption: {total_consumption}), using last value")
+                    total_consumption = values[-1]
+            else:
+                total_consumption = 0
             
             return {
                 "min": min(values),
                 "max": max(values),
                 "average": sum(values) / len(values),
-                "total_consumption": total_consumption,
+                "total_consumption": max(0, total_consumption),  # Ensure non-negative
                 "valid_points": len(values)
             }
             

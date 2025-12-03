@@ -254,13 +254,8 @@ class EnergyMonitorCard extends LitElement {
           };
 
           // Calculate consumption - use backend statistics if available, otherwise calculate
-          const kwh = currentResult.statistics?.total_consumption !== null && currentResult.statistics?.total_consumption !== undefined
-            ? currentResult.statistics.total_consumption
-            : this._calculateTotalConsumption(currentResult.history);
-          
-          const comparisonKwh = comparisonResult.statistics?.total_consumption !== null && comparisonResult.statistics?.total_consumption !== undefined
-            ? comparisonResult.statistics.total_consumption
-            : (comparisonResult.history ? this._calculateTotalConsumption(comparisonResult.history) : 0);
+          const kwh = currentResult.statistics?.total_consumption ?? this._calculateTotalConsumption(currentResult.history);
+          const comparisonKwh = comparisonResult.statistics?.total_consumption ?? (comparisonResult.history ? this._calculateTotalConsumption(comparisonResult.history) : 0);
 
           console.log(`  → ${device.name}: ${kwh} kWh (confronto: ${comparisonKwh} kWh)`);
 
