@@ -258,8 +258,8 @@ class HistoryView(HomeAssistantView):
                 validated_history = []
                 
                 for state in entity_history:
-                    # Skip invalid states
-                    if state.state in INVALID_STATES:
+                    # Skip invalid or None states
+                    if state.state is None or state.state in INVALID_STATES:
                         continue
                     
                     # Try to parse as number for validation

@@ -296,13 +296,15 @@ class EnergyMonitorCard extends LitElement {
       if (response && response.data && response.data[entityId]) {
         const historyData = response.data[entityId];
         console.log(`  ✓ ${historyData.length} data points found`);
-        // Convert backend format to expected format
-        return historyData.map(point => ({
-          state: point.state,
-          last_changed: point.last_changed,
-          last_updated: point.last_updated,
-          attributes: point.attributes
-        }));
+        // Convert backend format to expected format with validation
+        return historyData
+          .filter(point => point && typeof point.state !== 'undefined')
+          .map(point => ({
+            state: point.state,
+            last_changed: point.last_changed || point.last_updated,
+            last_updated: point.last_updated || point.last_changed,
+            attributes: point.attributes || {}
+          }));
       }
 
       console.warn(`  ⚠️ No data for ${entityId}`);
