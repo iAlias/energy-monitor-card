@@ -23,7 +23,8 @@ class EnergyMonitorCard extends LitElement {
       _comparisonEndDate: { type: String },
       _consumptionData: { type: Object },
       _costData: { type: Object },
-      _loading: { type: Boolean }
+      _loading: { type: Boolean },
+      _error: { type: String }
     };
   }
 
@@ -36,6 +37,7 @@ class EnergyMonitorCard extends LitElement {
     this._costData = {};
     this._loading = false;
     this._isLoadingData = false;
+    this._error = null;
     this._initializeDates();
   }
 
@@ -148,15 +150,21 @@ class EnergyMonitorCard extends LitElement {
 
     if (!this.hass || !this._devices || !this._devices.length) {
       console.log('⚠ Nessun dispositivo o hass non pronto');
+      this._error = 'Nessun dispositivo rilevato. Verifica la configurazione.';
+      this.requestUpdate();
       return;
     }
 
     this._isLoadingData = true;
     this._loading = true;
+    this._error = null;
     this.requestUpdate();
 
     this._consumptionData = {};
     this._costData = {};
+
+    let hasData = false;
+    let errorCount = 0;
 
     try {
       console.log(`📊 Carico dati per ${this._devices.length} dispositivi`);
@@ -185,14 +193,15 @@ class EnergyMonitorCard extends LitElement {
             device: device.name
           };
 
+          // Calculate consumption regardless of show_costs setting
+          const kwh = this._calculateTotalConsumption(currentData);
+          const comparisonKwh = comparisonData
+            ? this._calculateTotalConsumption(comparisonData)
+            : 0;
+
+          console.log(`  → ${device.name}: ${kwh} kWh (confronto: ${comparisonKwh} kWh)`);
+
           if (this.config.show_costs) {
-            const kwh = this._calculateTotalConsumption(currentData);
-            const comparisonKwh = comparisonData
-              ? this._calculateTotalConsumption(comparisonData)
-              : 0;
-
-            console.log(`  → ${device.name}: ${kwh} kWh (confronto: ${comparisonKwh} kWh)`);
-
             this._costData[device.id] = {
               current: kwh * this.config.price_per_kwh,
               comparison: comparisonKwh * this.config.price_per_kwh,
@@ -200,12 +209,30 @@ class EnergyMonitorCard extends LitElement {
               comparisonKwh
             };
           }
+
+          // Track if we have any historical data points (even if consumption is zero)
+          if (currentData && currentData.length > 0) {
+            hasData = true;
+          }
+          if (comparisonData && comparisonData.length > 0) {
+            hasData = true;
+          }
+
+          if (!currentData || currentData.length === 0) {
+            errorCount++;
+          }
         }
+      }
+
+      // Show error only if ALL devices have no data
+      if (!hasData && errorCount > 0) {
+        this._error = 'Nessun dato disponibile per il periodo selezionato. Verifica che i sensori abbiano dati storici.';
       }
 
       console.log('✅ Caricamento completato');
     } catch (err) {
       console.error('❌ Errore caricamento:', err);
+      this._error = 'Errore durante il caricamento dei dati. Controlla la console per dettagli.';
     } finally {
       this._loading = false;
       this._isLoadingData = false;
@@ -215,27 +242,41 @@ class EnergyMonitorCard extends LitElement {
 
   async _getHistoryData(entityId, startDate, endDate) {
     try {
-      const start = `${startDate}T00:00:00`;
-      const end = `${endDate}T23:59:59`;
+      // Verify entity exists
+      if (!this.hass.states[entityId]) {
+        console.warn(`⚠️ Entity not found: ${entityId}`);
+        return [];
+      }
 
-      // ✅ CORREZIONE: aggiungi "/" all'inizio
+      // Add UTC timezone to dates (full ISO 8601 format)
+      const start = `${startDate}T00:00:00Z`;
+      const end = `${endDate}T23:59:59Z`;
+
       const endpoint = `/api/history/period/${start}?end_time=${end}&filter_entity_id=${entityId}`;
       
-      console.log(`🔌 API: ${endpoint}`);
+      console.log(`🔌 API Request: ${endpoint}`);
 
       const response = await this.hass.callApi('GET', endpoint);
 
-      console.log(`📦 Risposta per ${entityId}:`, response);
+      console.log(`📦 Response for ${entityId}:`, response);
 
       if (Array.isArray(response) && response.length > 0 && Array.isArray(response[0])) {
-        console.log(`  ✓ ${response[0].length} punti trovati`);
+        console.log(`  ✓ ${response[0].length} data points found`);
         return response[0];
       }
 
-      console.warn(`  ✗ Nessun dato per ${entityId}`);
+      console.warn(`  ⚠️ No data for ${entityId}`);
       return [];
     } catch (error) {
-      console.error(`❌ Errore API per ${entityId}:`, error);
+      console.error(`❌ API Error for ${entityId}:`, error);
+      
+      // Detailed error logging (verify error object structure)
+      if (error && error.status_code === 404) {
+        console.error(`  → 404 Not Found - Entity ${entityId} may not have historical data`);
+      } else if (error && error.status_code) {
+        console.error(`  → HTTP ${error.status_code}: ${error.message || 'Unknown error'}`);
+      }
+      
       return [];
     }
   }
@@ -357,6 +398,7 @@ class EnergyMonitorCard extends LitElement {
 
         <div class="card-content">
           ${this._renderPeriodSelector()}
+          ${this._error ? this._renderError() : ''}
           ${this._loading ? this._renderLoading() : ''}
           <div class="devices-grid">
             ${this._devices.map((device) => this._renderDeviceCard(device))}
@@ -437,6 +479,15 @@ class EnergyMonitorCard extends LitElement {
     `;
   }
 
+  _renderError() {
+    return html`
+      <div class="error-message">
+        <ha-icon icon="mdi:alert-circle"></ha-icon>
+        <span>${this._error}</span>
+      </div>
+    `;
+  }
+
   _renderDeviceCard(device) {
     const consumption = this._consumptionData[device.id];
     const cost = this._costData[device.id];
@@ -446,13 +497,22 @@ class EnergyMonitorCard extends LitElement {
     const currentKwh = consumption.current ? this._calculateTotalConsumption(consumption.current) : 0;
     const comparisonKwh = consumption.comparison ? this._calculateTotalConsumption(consumption.comparison) : 0;
     const percentageDiff = this._getComparison(currentKwh, comparisonKwh);
+    // Only check if historical data exists, not if consumption is zero (device could be off)
+    const hasNoData = !consumption.current?.length;
 
     return html`
-      <div class="device-card">
+      <div class="device-card ${hasNoData ? 'no-data' : ''}">
         <div class="device-header">
           <ha-icon icon="${device.icon}"></ha-icon>
           <h3>${device.name}</h3>
         </div>
+
+        ${hasNoData ? html`
+          <div class="no-data-message">
+            <ha-icon icon="mdi:information-outline"></ha-icon>
+            <span>Nessun dato disponibile per questo periodo</span>
+          </div>
+        ` : ''}
 
         <div class="device-stats">
           <div class="stat">
@@ -571,8 +631,13 @@ class EnergyMonitorCard extends LitElement {
       .period-group label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; }
       .period-group select, .period-group input { padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 14px; background: var(--bg-primary); color: var(--text-primary); cursor: pointer; }
       .loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 30px; color: var(--text-secondary); }
+      .error-message { display: flex; align-items: center; gap: 10px; padding: 15px; margin-bottom: 15px; background: rgba(244, 67, 54, 0.1); border: 1px solid var(--error-color); border-radius: 8px; color: var(--error-color); }
+      .error-message ha-icon { width: 24px; height: 24px; }
       .devices-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; margin-bottom: 20px; }
       .device-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; }
+      .device-card.no-data { opacity: 0.7; }
+      .no-data-message { display: flex; align-items: center; gap: 8px; padding: 10px; margin-bottom: 10px; background: rgba(255, 152, 0, 0.1); border-left: 3px solid var(--warning-color); border-radius: 4px; color: var(--warning-color); font-size: 13px; }
+      .no-data-message ha-icon { width: 20px; height: 20px; }
       .device-header { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; border-bottom: 2px solid var(--border-color); padding-bottom: 10px; }
       .device-header ha-icon { color: var(--primary-color); width: 24px; height: 24px; }
       .device-header h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--text-primary); }
