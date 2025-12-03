@@ -193,24 +193,26 @@ class EnergyMonitorCard extends LitElement {
             device: device.name
           };
 
+          // Calculate consumption regardless of show_costs setting
+          const kwh = this._calculateTotalConsumption(currentData);
+          const comparisonKwh = comparisonData
+            ? this._calculateTotalConsumption(comparisonData)
+            : 0;
+
+          console.log(`  → ${device.name}: ${kwh} kWh (confronto: ${comparisonKwh} kWh)`);
+
           if (this.config.show_costs) {
-            const kwh = this._calculateTotalConsumption(currentData);
-            const comparisonKwh = comparisonData
-              ? this._calculateTotalConsumption(comparisonData)
-              : 0;
-
-            console.log(`  → ${device.name}: ${kwh} kWh (confronto: ${comparisonKwh} kWh)`);
-
             this._costData[device.id] = {
               current: kwh * this.config.price_per_kwh,
               comparison: comparisonKwh * this.config.price_per_kwh,
               kwh,
               comparisonKwh
             };
+          }
 
-            if (kwh > 0 || comparisonKwh > 0) {
-              hasData = true;
-            }
+          // Track if we have any data at all
+          if (kwh > 0 || comparisonKwh > 0) {
+            hasData = true;
           }
 
           if (!currentData || currentData.length === 0) {
@@ -246,8 +248,7 @@ class EnergyMonitorCard extends LitElement {
       const start = `${startDate}T00:00:00Z`;
       const end = `${endDate}T23:59:59Z`;
 
-      // Usa minimal_response per ridurre il carico API
-      const endpoint = `/api/history/period/${start}?end_time=${end}&filter_entity_id=${entityId}&minimal_response`;
+      const endpoint = `/api/history/period/${start}?end_time=${end}&filter_entity_id=${entityId}`;
       
       console.log(`🔌 API Request: ${endpoint}`);
 
@@ -492,7 +493,8 @@ class EnergyMonitorCard extends LitElement {
     const currentKwh = consumption.current ? this._calculateTotalConsumption(consumption.current) : 0;
     const comparisonKwh = consumption.comparison ? this._calculateTotalConsumption(consumption.comparison) : 0;
     const percentageDiff = this._getComparison(currentKwh, comparisonKwh);
-    const hasNoData = currentKwh === 0 && (!consumption.current || consumption.current.length === 0);
+    // Only check if historical data exists, not if consumption is zero (device could be off)
+    const hasNoData = !consumption.current || consumption.current.length === 0;
 
     return html`
       <div class="device-card ${hasNoData ? 'no-data' : ''}">
