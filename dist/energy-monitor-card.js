@@ -84,41 +84,36 @@ class EnergyMonitorCard extends LitElement {
 
     // Only auto-detect if enabled in config
     if (this.config.auto_detect) {
-      Object.keys(this.hass.states).forEach((entityId) => {
-        const state = this.hass.states[entityId];
+      // Try to use the backend API first
+      try {
+        const response = await this.hass.callApi('GET', '/api/energy_monitor/entities');
+        
+        if (response && response.success && Array.isArray(response.entities)) {
+          console.log(`✓ Backend API found ${response.count} energy sensors`);
+          
+          response.entities.forEach((entity) => {
+            const deviceId = entity.entity_id;
+            const deviceName = entity.friendly_name || entity.entity_id;
 
-        // SKIP sensori _cost, _power, cerchiamo solo _energy puri
-        if (entityId.includes('_cost') || entityId.includes('_price')) {
-          return;
-        }
-
-        if (
-          entityId.startsWith('sensor.') &&
-          (
-            state.attributes.unit_of_measurement === 'kWh' ||
-            state.attributes.device_class === 'energy' ||
-            (entityId.includes('energy') && !entityId.includes('power'))
-          )
-        ) {
-          const deviceId = state.attributes.device_id || entityId;
-          const deviceName = state.attributes.friendly_name || entityId;
-
-          if (!detectedDevices[deviceId]) {
             detectedDevices[deviceId] = {
               id: deviceId,
               name: deviceName,
-              entities: [],
+              entities: [{
+                entity_id: entity.entity_id,
+                unit: entity.unit_of_measurement,
+                type: 'energy'
+              }],
               icon: 'mdi:lightning-bolt'
             };
-          }
-
-          detectedDevices[deviceId].entities.push({
-            entity_id: entityId,
-            unit: state.attributes.unit_of_measurement,
-            type: 'energy'
           });
+        } else {
+          console.warn('⚠️ Backend API returned no entities, falling back to local detection');
+          this._detectDevicesLocal(detectedDevices);
         }
-      });
+      } catch (error) {
+        console.warn('⚠️ Backend API not available, using local detection:', error);
+        this._detectDevicesLocal(detectedDevices);
+      }
     }
 
     // Entità configurate manualmente - accept ANY sensor.* entity
@@ -166,6 +161,45 @@ class EnergyMonitorCard extends LitElement {
     console.log('✓ Dispositivi rilevati:', this._devices);
   }
 
+  _detectDevicesLocal(detectedDevices) {
+    // Fallback to local detection if backend is not available
+    Object.keys(this.hass.states).forEach((entityId) => {
+      const state = this.hass.states[entityId];
+
+      // SKIP sensori _cost, _power, cerchiamo solo _energy puri
+      if (entityId.includes('_cost') || entityId.includes('_price')) {
+        return;
+      }
+
+      if (
+        entityId.startsWith('sensor.') &&
+        (
+          state.attributes.unit_of_measurement === 'kWh' ||
+          state.attributes.device_class === 'energy' ||
+          (entityId.includes('energy') && !entityId.includes('power'))
+        )
+      ) {
+        const deviceId = state.attributes.device_id || entityId;
+        const deviceName = state.attributes.friendly_name || entityId;
+
+        if (!detectedDevices[deviceId]) {
+          detectedDevices[deviceId] = {
+            id: deviceId,
+            name: deviceName,
+            entities: [],
+            icon: 'mdi:lightning-bolt'
+          };
+        }
+
+        detectedDevices[deviceId].entities.push({
+          entity_id: entityId,
+          unit: state.attributes.unit_of_measurement,
+          type: 'energy'
+        });
+      }
+    });
+  }
+
   async _loadConsumptionData() {
     if (this._isLoadingData) {
       console.log('⏭ Caricamento già in corso, skip');
@@ -197,31 +231,31 @@ class EnergyMonitorCard extends LitElement {
         for (const entity of device.entities) {
           console.log(`📈 Carico: ${entity.entity_id}`);
 
-          const currentData = await this._getHistoryData(
+          const currentResult = await this._getHistoryData(
             entity.entity_id,
             this._startDate,
             this._endDate
           );
 
-          const comparisonData = this.config.show_comparison
+          const comparisonResult = this.config.show_comparison
             ? await this._getHistoryData(
                 entity.entity_id,
                 this._comparisonStartDate,
                 this._comparisonEndDate
               )
-            : null;
+            : { history: [], statistics: null };
 
           this._consumptionData[device.id] = {
-            current: currentData,
-            comparison: comparisonData,
+            current: currentResult.history,
+            comparison: comparisonResult.history,
+            currentStats: currentResult.statistics,
+            comparisonStats: comparisonResult.statistics,
             device: device.name
           };
 
-          // Calculate consumption regardless of show_costs setting
-          const kwh = this._calculateTotalConsumption(currentData);
-          const comparisonKwh = comparisonData
-            ? this._calculateTotalConsumption(comparisonData)
-            : 0;
+          // Calculate consumption - use backend statistics if available, otherwise calculate
+          const kwh = currentResult.statistics?.total_consumption ?? this._calculateTotalConsumption(currentResult.history);
+          const comparisonKwh = comparisonResult.statistics?.total_consumption ?? (comparisonResult.history ? this._calculateTotalConsumption(comparisonResult.history) : 0);
 
           console.log(`  → ${device.name}: ${kwh} kWh (confronto: ${comparisonKwh} kWh)`);
 
@@ -235,14 +269,14 @@ class EnergyMonitorCard extends LitElement {
           }
 
           // Track if we have any historical data points (even if consumption is zero)
-          if (currentData && currentData.length > 0) {
+          if (currentResult.history && currentResult.history.length > 0) {
             hasData = true;
           }
-          if (comparisonData && comparisonData.length > 0) {
+          if (comparisonResult.history && comparisonResult.history.length > 0) {
             hasData = true;
           }
 
-          if (!currentData || currentData.length === 0) {
+          if (!currentResult.history || currentResult.history.length === 0) {
             errorCount++;
           }
         }
@@ -266,6 +300,44 @@ class EnergyMonitorCard extends LitElement {
 
   async _getHistoryData(entityId, startDate, endDate) {
     try {
+      // Use the new Energy Monitor Backend API
+      const endpoint = `/api/energy_monitor/history?entity_id=${entityId}&start=${startDate}&end=${endDate}`;
+      
+      console.log(`🔌 Backend API Request: ${endpoint}`);
+
+      const response = await this.hass.callApi('GET', endpoint);
+
+      console.log(`📦 Backend Response for ${entityId}:`, response);
+
+      if (response && response.success && Array.isArray(response.history)) {
+        console.log(`  ✓ ${response.data_points} data points found`);
+        console.log(`  📊 Statistics:`, response.statistics);
+        
+        // Return an object with both history and statistics
+        return {
+          history: response.history,
+          statistics: response.statistics
+        };
+      }
+
+      if (response && !response.success) {
+        console.warn(`  ⚠️ Backend error: ${response.error}`);
+      } else {
+        console.warn(`  ⚠️ No data for ${entityId}`);
+      }
+      return { history: [], statistics: null };
+    } catch (error) {
+      console.error(`❌ Backend API Error for ${entityId}:`, error);
+      
+      // Fall back to direct history API if backend is not available
+      console.log(`  🔄 Falling back to direct history API`);
+      const fallbackData = await this._getHistoryDataFallback(entityId, startDate, endDate);
+      return { history: fallbackData, statistics: null };
+    }
+  }
+
+  async _getHistoryDataFallback(entityId, startDate, endDate) {
+    try {
       // Verify entity exists
       if (!this.hass.states[entityId]) {
         console.warn(`⚠️ Entity not found: ${entityId}`);
@@ -278,29 +350,19 @@ class EnergyMonitorCard extends LitElement {
 
       const endpoint = `/api/history/period/${start}?end_time=${end}&filter_entity_id=${entityId}`;
       
-      console.log(`🔌 API Request: ${endpoint}`);
+      console.log(`🔌 Fallback API Request: ${endpoint}`);
 
       const response = await this.hass.callApi('GET', endpoint);
 
-      console.log(`📦 Response for ${entityId}:`, response);
-
       if (Array.isArray(response) && response.length > 0 && Array.isArray(response[0])) {
-        console.log(`  ✓ ${response[0].length} data points found`);
+        console.log(`  ✓ ${response[0].length} data points found (fallback)`);
         return response[0];
       }
 
-      console.warn(`  ⚠️ No data for ${entityId}`);
+      console.warn(`  ⚠️ No data for ${entityId} (fallback)`);
       return [];
     } catch (error) {
-      console.error(`❌ API Error for ${entityId}:`, error);
-      
-      // Detailed error logging (verify error object structure)
-      if (error && error.status_code === 404) {
-        console.error(`  → 404 Not Found - Entity ${entityId} may not have historical data`);
-      } else if (error && error.status_code) {
-        console.error(`  → HTTP ${error.status_code}: ${error.message || 'Unknown error'}`);
-      }
-      
+      console.error(`❌ Fallback API Error for ${entityId}:`, error);
       return [];
     }
   }
