@@ -35,36 +35,26 @@ class EnergyMonitorCardEditor extends LitElement {
   _loadDevices() {
     if (!this.hass) return;
 
-    const energyDevices = [];
-    const seenDevices = new Set();
+    const allSensors = [];
 
     Object.keys(this.hass.states).forEach(entityId => {
       const state = this.hass.states[entityId];
       
-      if (entityId.startsWith('sensor.') && 
-          (state.attributes.unit_of_measurement === 'kWh' ||
-           state.attributes.unit_of_measurement === 'W' ||
-           state.attributes.device_class === 'energy' ||
-           state.attributes.device_class === 'power' ||
-           entityId.includes('energy') ||
-           entityId.includes('power') ||
-           entityId.includes('consumption'))) {
-        
-        const deviceId = state.attributes.device_id || entityId;
+      // Allow selection of ANY sensor.* entity
+      if (entityId.startsWith('sensor.')) {
         const deviceName = state.attributes.friendly_name || entityId;
+        const unit = state.attributes.unit_of_measurement || '';
 
-        if (!seenDevices.has(deviceId)) {
-          seenDevices.add(deviceId);
-          energyDevices.push({
-            entity_id: entityId,
-            name: deviceName,
-            icon: 'mdi:lightning-bolt'
-          });
-        }
+        allSensors.push({
+          entity_id: entityId,
+          name: deviceName,
+          unit: unit,
+          icon: 'mdi:lightning-bolt'
+        });
       }
     });
 
-    this._devices = energyDevices;
+    this._devices = allSensors;
   }
 
   _updateConfig(key, value) {
@@ -150,7 +140,7 @@ class EnergyMonitorCardEditor extends LitElement {
                   ></ha-textfield>
                   <datalist id="entities-list">
                     ${this._devices.map(d => html`
-                      <option value="${d.entity_id}">${d.name}</option>
+                      <option value="${d.entity_id}">${d.name}${d.unit ? ' - ' + d.unit : ''}</option>
                     `)}
                   </datalist>
 
@@ -174,13 +164,13 @@ class EnergyMonitorCardEditor extends LitElement {
         </div>
 
         <div class="section">
-          <h3>Dispositivi Rilevati Automaticamente</h3>
-          <p class="hint">Se "Rileva Automaticamente" è abilitato, verranno inclusi anche questi:</p>
+          <h3>Sensori Disponibili</h3>
+          <p class="hint">Tutti i sensori disponibili nel sistema:</p>
           <div class="devices-list">
             ${this._devices.map(device => html`
               <div class="device-item">
                 <span class="device-name">${device.name}</span>
-                <span class="device-id">${device.entity_id}</span>
+                <span class="device-id">${device.entity_id}${device.unit ? ' - ' + device.unit : ''}</span>
               </div>
             `)}
           </div>
