@@ -4,7 +4,7 @@ import { HomeAssistant } from 'custom-card-helpers';
 interface EntityInfo {
   entity_id: string;
   name: string;
-  device_class?: string;
+  unit?: string;
 }
 
 const STORAGE_KEY = "energy_monitor_selected_entities";
@@ -39,31 +39,26 @@ export class EnergyMonitorCard extends LitElement {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(entities));
   }
 
-  // Rileva automaticamente sensori di energia/potenza
-  get availableEnergyEntities(): EntityInfo[] {
+  // Rileva tutti i sensori sensor.* (non solo energy/power)
+  get availableSensors(): EntityInfo[] {
     const result: EntityInfo[] = [];
     if (!this.hass?.states) return result;
     Object.entries(this.hass.states).forEach(([entity_id, entity]) => {
-      if (
-        entity_id.startsWith('sensor.') &&
-        (entity.attributes.device_class === 'energy' ||
-          entity.attributes.device_class === 'power')
-      ) {
+      if (entity_id.startsWith('sensor.')) {
         result.push({
           entity_id,
           name: entity.attributes.friendly_name || entity_id,
-          device_class: entity.attributes.device_class
+          unit: entity.attributes.unit_of_measurement
         });
       }
     });
     return result;
   }
 
-  // Visualizza impostazioni con dropdown di selezione sensori
   renderSettingsPanel() {
-    const entities = this.availableEnergyEntities;
+    const entities = this.availableSensors;
     if (!entities.length) {
-      return html`<span>Nessun sensore di energia/potenza rilevato.</span>`;
+      return html`<span>Nessun sensore trovato.</span>`;
     }
     return html`
       <label for="entities-menu">Seleziona i sensori da monitorare:</label>
@@ -74,10 +69,9 @@ export class EnergyMonitorCard extends LitElement {
               value="${entity.entity_id}"
               ?selected="${this.selectedEntities.includes(entity.entity_id)}"
             >
-              ${entity.name}
-              (${entity.device_class})
+              ${entity.name} (${entity.entity_id}${entity.unit ? ' - ' + entity.unit : ''})
             </option>
-          ``
+          `
         )}
       </select>
     `;
@@ -91,34 +85,46 @@ export class EnergyMonitorCard extends LitElement {
     this.requestUpdate();
   }
 
-  // Mostra i dati dei sensori selezionati
+  // Controlla che sia un numero valido
+  _isValidNumber(val: any) {
+    if (val === undefined || val === null) return false;
+    if (["unavailable", "unknown", "none", ""].includes(String(val).toLowerCase()))
+      return false;
+    return !isNaN(Number(val));
+  }
+
   renderEntitiesData() {
     if (!this.selectedEntities.length) {
       return html`
-        <div>Seleziona almeno un sensore di energia/potenza dalle impostazioni.</div>
+        <div>Seleziona almeno un sensore dalle impostazioni.</div>
       `;
     }
     return html`
       <div>
-        ${this.selectedEntities.map(
-          (entity_id) => {
-            const stateObj = this.hass.states[entity_id];
-            if (!stateObj) {
-              return html`
-                <div class="entity-data">
-                  <strong>${entity_id}</strong>
-                  <div style="color:red;">Sensore non trovato</div>
-                </div>
-              `;
-            }
+        ${this.selectedEntities.map((entity_id) => {
+          const stateObj = this.hass.states[entity_id];
+          if (!stateObj) {
             return html`
               <div class="entity-data">
-                <strong>${stateObj.attributes.friendly_name || entity_id}</strong>
-                <div>Valore attuale: ${stateObj.state} ${stateObj.attributes.unit_of_measurement || ''}</div>
+                <strong>${entity_id}</strong>
+                <div style="color:red;">Sensore non trovato</div>
               </div>
             `;
           }
-        )}
+          const val = stateObj.state;
+          const unit = stateObj.attributes.unit_of_measurement || '';
+          return html`
+            <div class="entity-data">
+              <strong>${stateObj.attributes.friendly_name || entity_id}</strong>
+              <div>
+                Valore attuale:
+                ${this._isValidNumber(val)
+                  ? html`<span>${Number(val)} ${unit}</span>`
+                  : html`<span style="color:red;">Valore non disponibile</span>`}
+              </div>
+            </div>
+          `;
+        })}
       </div>
     `;
   }
