@@ -210,8 +210,11 @@ class EnergyMonitorCard extends LitElement {
             };
           }
 
-          // Track if we have any data at all
-          if (kwh > 0 || comparisonKwh > 0) {
+          // Track if we have any historical data points (even if consumption is zero)
+          if (currentData && currentData.length > 0) {
+            hasData = true;
+          }
+          if (comparisonData && comparisonData.length > 0) {
             hasData = true;
           }
 
@@ -221,6 +224,7 @@ class EnergyMonitorCard extends LitElement {
         }
       }
 
+      // Show error only if ALL devices have no data
       if (!hasData && errorCount > 0) {
         this._error = 'Nessun dato disponibile per il periodo selezionato. Verifica che i sensori abbiano dati storici.';
       }
@@ -266,10 +270,10 @@ class EnergyMonitorCard extends LitElement {
     } catch (error) {
       console.error(`❌ API Error for ${entityId}:`, error);
       
-      // Log dettagliato dell'errore
-      if (error.status_code === 404) {
+      // Log dettagliato dell'errore (verifica struttura dell'oggetto error)
+      if (error && error.status_code === 404) {
         console.error(`  → 404 Not Found - L'entità ${entityId} potrebbe non avere dati storici`);
-      } else if (error.status_code) {
+      } else if (error && error.status_code) {
         console.error(`  → HTTP ${error.status_code}: ${error.message || 'Unknown error'}`);
       }
       
