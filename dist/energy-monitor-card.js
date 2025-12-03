@@ -1,5 +1,8 @@
 import { LitElement, html, css } from 'https://unpkg.com/lit@2.8.0?module';
 
+// Constants
+const INVALID_STATE_VALUES = ["unavailable", "unknown", "none", ""];
+
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'energy-monitor-card',
@@ -405,7 +408,7 @@ class EnergyMonitorCard extends LitElement {
 
   _isValidNumber(val) {
     if (val === undefined || val === null) return false;
-    if (["unavailable", "unknown", "none", ""].includes(String(val).toLowerCase()))
+    if (INVALID_STATE_VALUES.includes(String(val).toLowerCase()))
       return false;
     return !isNaN(Number(val));
   }
@@ -560,6 +563,13 @@ class EnergyMonitorCard extends LitElement {
     if (device.isManualConfig) {
       const hasHistoryData = consumption && consumption.current && consumption.current.length > 0;
       
+      // Calculate values once to avoid redundant computations
+      const currentConsumption = hasHistoryData ? this._calculateTotalConsumption(consumption.current) : 0;
+      const comparisonConsumption = (hasHistoryData && consumption.comparison && consumption.comparison.length > 0) 
+        ? this._calculateTotalConsumption(consumption.comparison) 
+        : 0;
+      const percentageDiff = hasHistoryData ? this._getComparison(currentConsumption, comparisonConsumption) : 0;
+      
       return html`
         <div class="device-card ${!hasHistoryData ? 'no-data' : ''}">
           <div class="device-header">
@@ -576,7 +586,7 @@ class EnergyMonitorCard extends LitElement {
             ${hasHistoryData ? html`
               <div class="stat">
                 <span class="stat-label">Consumo periodo</span>
-                <span class="stat-value">${this._calculateTotalConsumption(consumption.current).toFixed(2)} ${device.entities[0].unit || ''}</span>
+                <span class="stat-value">${currentConsumption.toFixed(2)} ${device.entities[0].unit || ''}</span>
                 ${this.config.show_costs && cost ? html`<span class="stat-cost">${this._formatCurrency(cost.current)}</span>` : ''}
               </div>
 
@@ -584,14 +594,14 @@ class EnergyMonitorCard extends LitElement {
                 ? html`
                     <div class="stat">
                       <span class="stat-label">Periodo precedente</span>
-                      <span class="stat-value">${this._calculateTotalConsumption(consumption.comparison).toFixed(2)} ${device.entities[0].unit || ''}</span>
+                      <span class="stat-value">${comparisonConsumption.toFixed(2)} ${device.entities[0].unit || ''}</span>
                       ${this.config.show_costs && cost ? html`<span class="stat-cost">${this._formatCurrency(cost.comparison)}</span>` : ''}
                     </div>
 
                     <div class="stat comparison">
                       <span class="stat-label">Variazione</span>
-                      <span class="stat-value ${this._getComparison(this._calculateTotalConsumption(consumption.current), this._calculateTotalConsumption(consumption.comparison)) > 0 ? 'increase' : 'decrease'}">
-                        ${this._getComparison(this._calculateTotalConsumption(consumption.current), this._calculateTotalConsumption(consumption.comparison)) > 0 ? '+' : ''}${this._getComparison(this._calculateTotalConsumption(consumption.current), this._calculateTotalConsumption(consumption.comparison))}%
+                      <span class="stat-value ${percentageDiff > 0 ? 'increase' : 'decrease'}">
+                        ${percentageDiff > 0 ? '+' : ''}${percentageDiff}%
                       </span>
                     </div>
                   `
@@ -605,7 +615,7 @@ class EnergyMonitorCard extends LitElement {
           </div>
 
           ${hasHistoryData ? html`
-            <div class="device-chart">${this._renderChart(device.id, this._calculateTotalConsumption(consumption.current), consumption.comparison ? this._calculateTotalConsumption(consumption.comparison) : 0)}</div>
+            <div class="device-chart">${this._renderChart(device.id, currentConsumption, comparisonConsumption)}</div>
           ` : ''}
         </div>
       `;

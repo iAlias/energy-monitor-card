@@ -165,7 +165,7 @@ class EnergyMonitorCardEditor extends LitElement {
 
         <div class="section">
           <h3>Sensori Disponibili</h3>
-          <p class="hint">Tutti i sensori disponibili nel sistema (filtra per trovare quello desiderato):</p>
+          <p class="hint">Tutti i sensori disponibili nel sistema:</p>
           <div class="devices-list">
             ${this._devices.map(device => html`
               <div class="device-item">
