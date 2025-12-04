@@ -5,15 +5,11 @@
   },
   "render_process": [
     {
-      "url": "/local/community/energy-monitor-card/dist/energy-monitor-card.js",
-      "type": "module"
-    },
-    {
-      "url": "/local/community/energy-monitor-card/dist/energy-monitor-editor.js",
+      "url": "/local/community/energy-monitor-card/energy-monitor-card.js",
       "type": "module"
     }
   ],
-  "documentation": "https://github.com/yourusername/energy-monitor-card",
-  "issues": "https://github.com/yourusername/energy-monitor-card/issues",
+  "documentation": "https://github.com/iAlias/energy-monitor-card",
+  "issues": "https://github.com/iAlias/energy-monitor-card/issues",
   "requirements": []
 }

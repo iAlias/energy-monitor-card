@@ -1,73 +1,59 @@
-# Energy Monitor Card - Complete Solution
+# Energy Monitor Card - Fast Installation
 
-A complete Home Assistant solution for monitoring energy consumption, featuring a secure Python backend integration and a lightweight frontend card.
+A complete Home Assistant solution for monitoring energy consumption with **zero manual configuration**. Install via HACS, restart, and you're done!
 
-## 🎯 Key Features
+## ✨ Features
 
-### Backend Integration (NEW!)
-✅ **Secure REST API** - Safe, validated sensor data access  
-✅ **Entity Validation** - Filters invalid and unavailable states  
-✅ **No More 404 Errors** - Proper error handling and validation  
-✅ **No False Zeros** - Validates numeric data before returning  
-✅ **Recorder Integration** - Seamless historical data access  
+- 🚀 **Super-Fast Installation** - Install via HACS, restart, add card (3 steps!)
+- 🔌 **Auto-Detection** - Automatically discovers your energy sensors
+- 📊 **Real-time Monitoring** - Display current energy consumption
+- 🔄 **Time Comparisons** - Compare with previous periods
+- 💰 **Cost Calculation** - Automatic cost calculation based on kWh rate
+- 📱 **Responsive Design** - Works on desktop, tablet, and mobile
+- 🎨 **Theme Support** - Automatic light/dark theme adaptation
+- 🔒 **Secure Backend** - Python integration with validated REST API
 
-### Frontend Card
-✅ **Real-time Monitoring** - Display current energy consumption  
-✅ **Time Comparisons** - Compare with previous periods  
-✅ **Cost Calculation** - Automatic cost calculation based on kWh rate  
-✅ **Auto-detection** - Automatically discovers energy sensors  
-✅ **Responsive Design** - Works on desktop, tablet, and mobile  
-✅ **Light/Dark Theme** - Automatic theme support  
+## 📦 Quick Start (3 Steps!)
 
-## 📦 Installation
+### Step 1: Install via HACS
 
-### Step 1: Install Backend Integration
-
-The backend integration provides secure API endpoints for the frontend card.
-
-#### Manual Installation
-
-1. Copy the backend integration to your Home Assistant:
-   ```bash
-   cp -r custom_components/energy_monitor_backend /config/custom_components/
-   ```
-
-2. Add to your `configuration.yaml`:
-   ```yaml
-   energy_monitor_backend:
-   ```
-
-3. Restart Home Assistant
-
-See [BACKEND-README.md](BACKEND-README.md) for detailed backend documentation.
-
-### Step 2: Install Frontend Card
-
-#### Via HACS (Recommended)
-
-1. Open **Home Assistant** → **HACS** → **Frontend**
-2. Click **Explore & Download Repositories**
+1. Open **HACS** in Home Assistant
+2. Click **+ Explore & Download Repositories**
 3. Search for **"Energy Monitor Card"**
-4. Click **Install**
-5. Restart Home Assistant
+4. Click **Download**
 
-#### Manual Installation
+### Step 2: Enable the Backend Integration
 
-1. Copy the frontend files:
-   ```bash
-   mkdir -p /config/www/community/energy-monitor-card/dist/
-   cp dist/*.js /config/www/community/energy-monitor-card/dist/
-   ```
+**Option A: Via UI (Recommended - Zero YAML!)**
 
-2. Add the resource in your dashboard:
-   - Go to **Settings** → **Dashboards** → **Resources**
-   - Click **Add Resource**
-   - URL: `/local/community/energy-monitor-card/dist/energy-monitor-card.js`
-   - Resource type: **JavaScript Module**
+1. Go to **Settings** → **Devices & Services** → **Integrations**
+2. Click **+ Add Integration**
+3. Search for **"Energy Monitor Backend"**
+4. Click to add it (no configuration needed!)
 
-3. Restart Home Assistant
+**Option B: Via configuration.yaml**
 
-## ⚙️ Configuration
+Add this single line to your `configuration.yaml`:
+```yaml
+energy_monitor_backend:
+```
+
+Then restart Home Assistant.
+
+### Step 3: Add the Card
+
+1. Edit your dashboard
+2. Click **+ Add Card**
+3. Search for **"Energy Monitor Card"** and add it
+
+**That's it!** The card will automatically:
+- ✅ Detect all your energy sensors
+- ✅ Load historical data
+- ✅ Calculate costs and comparisons
+
+## ⚙️ Configuration (Optional)
+
+The card works with **zero configuration**, but you can customize it:
 
 ### Basic Configuration
 
@@ -80,7 +66,9 @@ show_costs: true
 auto_detect: true
 ```
 
-### With Specific Devices
+### Manual Sensor Selection
+
+If you want to select specific sensors instead of auto-detection:
 
 ```yaml
 type: custom:energy-monitor-card
@@ -88,6 +76,7 @@ title: "Home Energy Monitor"
 price_per_kwh: 0.30
 show_comparison: true
 show_costs: true
+auto_detect: false
 entities:
   - entity_id: sensor.water_heater_energy
     name: "Water Heater"
@@ -106,53 +95,91 @@ entities:
 | `show_comparison` | boolean | true | Show period comparisons |
 | `show_costs` | boolean | true | Calculate and show costs |
 | `auto_detect` | boolean | true | Auto-detect energy sensors |
-| `entities` | array | [] | List of entities to monitor |
+| `entities` | array | [] | List of entities (when auto_detect is false) |
 
-## 🏗️ Architecture
+## 🏗️ How It Works
 
-This solution consists of two components:
+### Automatic Integration
 
-### 1. Backend Integration (`custom_components/energy_monitor_backend`)
+When you install this via HACS, two components are automatically set up:
 
-A Python custom integration that:
-- Validates sensor entities before returning data
-- Exposes safe REST API endpoints
-- Filters invalid states (unavailable, unknown, none)
-- Validates numeric data
-- Handles errors gracefully
+1. **Backend Integration** (`custom_components/energy_monitor_backend`)
+   - Auto-loads on startup (no config.yaml needed!)
+   - Provides secure REST API endpoints
+   - Validates all sensor data
+   - Filters invalid states (unavailable, unknown, none)
 
-**API Endpoints:**
-- `GET /api/energy_monitor/entities` - List all sensors
-- `GET /api/energy_monitor/state?entity_id=...` - Get entity state
-- `GET /api/energy_monitor/history?entity_id=...&start_time=...&end_time=...` - Get history
+2. **Frontend Card** (`www/community/energy-monitor-card`)
+   - Auto-registered as a resource (no manual setup!)
+   - Automatically detects energy sensors
+   - Consumes backend API for validated data
+   - Displays real-time energy monitoring
 
-### 2. Frontend Card (`dist/energy-monitor-card.js`)
+### Architecture
 
-A lightweight Lit-based custom card that:
-- Consumes the backend API endpoints
-- Displays energy consumption data
-- Calculates costs and comparisons
-- Provides a responsive user interface
-
-## 🔍 How It Works
-
-### Traditional Approach (Problems)
 ```
-Frontend Card → /api/history/period → 404 errors, false zeros
-```
-
-### New Approach (Solution)
-```
-Frontend Card → Backend API → Validated Data → No errors, accurate data
+┌─────────────────┐
+│  Frontend Card  │ ← Auto-detects sensors
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Backend API    │ ← Validates & filters data
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  HA Recorder    │ ← Historical data
+└─────────────────┘
 ```
 
-The backend integration:
-1. Validates entity exists and is a sensor
-2. Checks state is not "unavailable", "unknown", or "none"
-3. Validates numeric values for history data
-4. Returns clean, validated data to the frontend
+## ❓ FAQ
+
+### Do I need to add anything to configuration.yaml?
+
+**No!** You can set up the backend integration via the UI (Settings → Integrations). 
+
+Alternatively, you can add a single line to configuration.yaml if you prefer YAML:
+```yaml
+energy_monitor_backend:
+```
+
+### Do I need to manually register resources?
+
+**No!** HACS automatically registers the frontend resources.
+
+### How does auto-detection work?
+
+The card automatically finds sensors with:
+- `device_class: energy`
+- `unit_of_measurement: kWh`
+- Entity ID containing "energy" (excluding "power", "cost", "price")
+
+### Can I disable auto-detection?
+
+Yes! Set `auto_detect: false` and specify `entities:` manually.
+
+### Does it work without the backend integration?
+
+No, the backend integration is required. It's automatically installed with HACS.
+
+### Where is the historical data stored?
+
+In your Home Assistant Recorder database (same as all other sensors).
 
 ## 🐛 Troubleshooting
+
+### Card not appearing after install
+
+1. Clear browser cache (Ctrl+Shift+Del)
+2. Hard refresh the page (Ctrl+F5)
+3. Restart Home Assistant
+
+### No data showing
+
+1. Verify you have energy sensors in Developer Tools → States
+2. Ensure Recorder integration is enabled
+3. Check sensors have the `kWh` unit or `energy` device class
 
 ### Backend integration not loading
 
@@ -161,77 +188,47 @@ Check Home Assistant logs:
 tail -f /config/home-assistant.log | grep energy_monitor
 ```
 
-### Frontend card not appearing
-
-1. Clear browser cache (Ctrl+Shift+Del)
-2. Verify resource is added to dashboard
-3. Check browser console for errors (F12)
-
-### No historical data
-
-1. Verify recorder is configured:
-   ```yaml
-   recorder:
-     purge_keep_days: 30
-     include:
-       domains:
-         - sensor
-   ```
-
-2. Check entity has historical data in **History** panel
-
-### 404 Errors (Should not happen with new backend!)
-
-If you still see 404 errors:
-1. Verify backend integration is loaded
-2. Check entity exists: Developer Tools → States
-3. Ensure recorder includes the entity
+Should see:
+```
+Setting up Energy Monitor Backend integration
+Energy Monitor Backend integration setup complete
+```
 
 ## 📋 Requirements
 
 - Home Assistant 2023.12.0 or later
-- Recorder integration enabled
-- Python 3.11 or later (included with Home Assistant)
-- Modern browser with JavaScript enabled
+- HACS installed
+- Recorder integration enabled (default in HA)
+- Energy sensors with `kWh` unit or `energy` device class
 
 ## 🔒 Security
 
-The backend integration provides several security features:
+The backend integration provides:
+- ✅ Entity type validation (sensors only)
+- ✅ State validation (filters invalid states)
+- ✅ Numeric validation (ensures data integrity)
+- ✅ Error handling (no sensitive data in errors)
+- ✅ Parameter validation (validates all API params)
 
-- **Entity Type Validation** - Only sensor entities allowed
-- **State Validation** - Filters invalid states
-- **Numeric Validation** - Ensures data integrity
-- **Error Handling** - No sensitive data in error messages
-- **Parameter Validation** - Validates all API parameters
-
-## 📁 Repository Structure
+## 📁 What Gets Installed
 
 ```
-energy-monitor-card/
+config/
 ├── custom_components/
-│   └── energy_monitor_backend/     # Backend integration
+│   └── energy_monitor_backend/    # Backend integration (auto-loads)
 │       ├── __init__.py
 │       ├── const.py
-│       └── manifest.json
-├── dist/                           # Frontend compiled files
-│   ├── energy-monitor-card.js
-│   └── energy-monitor-editor.js
-├── src/                            # Frontend source
-│   └── EnergyMonitorCard.ts
-├── BACKEND-README.md               # Backend documentation
-├── README.md                       # This file
-└── LICENSE
+│       ├── manifest.json
+│       └── hacs.json
+└── www/
+    └── community/
+        └── energy-monitor-card/   # Frontend card (auto-registered)
+            └── energy-monitor-card.js
 ```
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Contributions welcome! Please open an issue or pull request.
 
 ## 📄 License
 
@@ -241,22 +238,9 @@ MIT License - See [LICENSE](LICENSE) file for details
 
 - **Issues**: https://github.com/iAlias/energy-monitor-card/issues
 - **Discussions**: https://github.com/iAlias/energy-monitor-card/discussions
-- **Backend Docs**: [BACKEND-README.md](BACKEND-README.md)
 - **Community**: https://community.home-assistant.io/
-
-## ✨ What's New
-
-### Version 1.0.0 - Backend Integration Release
-
-- ✅ **NEW: Backend Python Integration** - Secure REST API for validated sensor data
-- ✅ **FIXED: 404 Errors** - Proper entity validation before data fetch
-- ✅ **FIXED: False Zero Values** - Numeric validation ensures accurate data
-- ✅ **NEW: Enhanced Error Handling** - Clear error messages and logging
-- ✅ **NEW: State Validation** - Filters unavailable/unknown states
-- ✅ Comprehensive API documentation
-- ✅ Security improvements
-- ✅ Better error messages
 
 ---
 
-**Enjoy reliable energy monitoring with the complete backend + frontend solution! 🚀**
+**Enjoy effortless energy monitoring! 🚀**
+

@@ -13,25 +13,26 @@ This custom Home Assistant integration provides a secure REST API backend for th
 
 ## Installation
 
-### Option 1: Manual Installation
+### Via HACS (Recommended)
+
+1. Install via HACS (see main [README.md](README.md))
+2. Enable the integration via:
+   - **UI**: Settings → Devices & Services → Add Integration → "Energy Monitor Backend"
+   - **YAML**: Add `energy_monitor_backend:` to configuration.yaml
+3. Restart Home Assistant
+
+### Manual Installation
 
 1. Copy the `custom_components/energy_monitor_backend` directory to your Home Assistant's `custom_components` folder:
    ```bash
    cp -r custom_components/energy_monitor_backend /config/custom_components/
    ```
 
-2. Restart Home Assistant
+2. Enable the integration via:
+   - **UI**: Settings → Devices & Services → Add Integration → "Energy Monitor Backend"
+   - **YAML**: Add `energy_monitor_backend:` to configuration.yaml
 
-3. Add the integration to your `configuration.yaml`:
-   ```yaml
-   energy_monitor_backend:
-   ```
-
-4. Restart Home Assistant again
-
-### Option 2: HACS Installation (Future)
-
-This integration will be available via HACS in the future.
+3. Restart Home Assistant
 
 ## API Endpoints
 
